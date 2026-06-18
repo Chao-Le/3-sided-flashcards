@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cantonese Flashcards</title>
+<!-- PWA Meta Tags -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1976D2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CantoCards">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+    <style>
+        :root {
+            --primary: #CE82FF;
+            --secondary: #3B82F6;
+            --secondary-shadow: #2563EB;
+            --success: #58CC02;
+            --success-shadow: #46a302;
+            --error: #FF4B4B;
+            --error-shadow: #ea3939;
+            --bg: #F7F7F7;
+            --text: #3C3C3C;
+            --card-shadow: 0 4px 0 rgba(0,0,0,0.1);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Views */
+        .view {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            max-width: 600px; /* Slightly wider to accommodate 3 columns */
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .view.active { display: flex; }
+
+        /* Header */
+        header {
+            text-align: center;
+            padding: 10px 0;
+            margin-bottom: 10px;
+        }
+        h1 { font-size: 24px; margin: 0; color: var(--text); }
+
+        /* Progress Dashboard */
+        .progress-dashboard {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr) auto;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 12px;
+            border-radius: 16px;
+            border: 2px solid #E5E5E5;
+            text-align: center;
+        }
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-label { font-size: 10px; color: #888; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+        .stat-value { font-size: 16px; font-weight: 900; color: var(--primary); }
+
+        /* Dashboard Buttons */
+        #btn-go {
+            background-color: var(--success);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 22px;
+            font-weight: bold;
+            border-radius: 16px;
+            box-shadow: 0 4px 0 var(--success-shadow);
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 20px;
+            transition: transform 0.1s;
+        }
+        #btn-go:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--success-shadow); }
+
+        .list-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            background: white;
+            border-radius: 16px;
+            border: 2px solid #E5E5E5;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; background: #fdfdfd; padding: 12px; border-bottom: 2px solid #E5E5E5; position: sticky; top: 0; }
+        td { padding: 12px; border-bottom: 1px solid #F0F0F0; }
+        tr:nth-child(even) { background-color: #FAFAFA; }
+        .score-pill {
+            background: #E5E5E5;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        /* Quiz UI */
+        .progress-bar {
+            height: 12px;
+            background: #E5E5E5;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        #progress-inner {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        #question-card {
+            flex-shrink: 0;
+            min-height: 15vh;
+            background: white;
+            border-radius: 24px;
+            border: 2px solid #E5E5E5;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 35px;
+            font-weight: bold;
+            cursor: default;
+        }
+        #question-card.clickable { cursor: pointer; }
+        #question-card.clickable::after {
+            content: "Tap here to continue";
+            position: absolute;
+            bottom: 10px;
+            font-size: 14px;
+            opacity: 0.8;
+            font-weight: normal;
+        }
+        #question-card.correct { background: var(--success); color: white; border-color: var(--success); position: relative;}
+        #question-card.wrong { background: var(--error); color: white; border-color: var(--error); position: relative;}
+
+        .quiz-columns {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+        
+        .option-col {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option-btn {
+            background: white;
+            border: 2px solid #E5E5E5;
+            border-radius: 16px;
+            padding: 12px 8px;
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--text);
+            cursor: pointer;
+            box-shadow: var(--card-shadow);
+            transition: all 0.1s;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            word-break: break-word;
+        }
+        
+        /* Selection and states */
+        .option-btn.selected {
+            border-color: var(--secondary);
+            background: #EFF6FF;
+            color: var(--secondary);
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 var(--secondary-shadow);
+        }
+        .option-btn.correct-alt { background: var(--success); color: white; border-color: var(--success); box-shadow: 0 2px 0 var(--success-shadow); }
+        .option-btn.wrong-alt { background: var(--error); color: white; border-color: var(--error); box-shadow: 0 2px 0 var(--error-shadow); }
+
+        /* Summary */
+        .summary-content {
+            text-align: center;
+            margin-top: 50px;
+        }
+        .big-score { font-size: 64px; font-weight: 900; color: var(--primary); margin: 20px 0; }
+        
+        /* Animations */
+        .fade-in { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Responsive text sizes */
+        @media (max-width: 400px) {
+            .option-btn { font-size: 16px; padding: 10px 5px; }
+            #question-card { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- VIEW 1: DASHBOARD -->
+    <div id="view-home" class="view active">
+        <header><h1>Cantonese Flashcards</h1></header>
+        
+        <div class="progress-dashboard">
+            <div class="stat-box"><span class="stat-label">1x</span><span class="stat-value" id="stat-1">0</span></div>
+            <div class="stat-box"><span class="stat-label">2x</span><span class="stat-value" id="stat-2">0</span></div>
+            <div class="stat-box"><span class="stat-label">3x</span><span class="stat-value" id="stat-3">0</span></div>
+            <div class="stat-box"><span class="stat-label">4x</span><span class="stat-value" id="stat-4">0</span></div>
+            <div class="stat-box"><span class="stat-label">5+</span><span class="stat-value" id="stat-5plus">0</span></div>
+            <div class="stat-box" style="justify-content: flex-end; padding-bottom: 2px;">
+                <span class="stat-value" id="stat-total" style="color: #A0A0A0; font-size: 14px;">/0</span>
+            </div>
+        </div>
+
+        <button id="btn-go">GO!</button>
+        <div class="list-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Char</th>
+                        <th>Jyutping</th>
+                        <th>English</th>
+                        <th style="text-align:center">Score</th>
+                    </tr>
+                </thead>
+                <tbody id="stats-body">
+                    <!-- JS Injected Rows -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- VIEW 2: QUIZ -->
+    <div id="view-quiz" class="view">
+        <div class="progress-bar"><div id="progress-inner"></div></div>
+        
+        <div id="question-card">
+            <span id="question-text">Question</span>
+        </div>
+        
+        <div class="quiz-columns" id="quiz-columns">
+            <div class="option-col" id="col-left"></div>
+            <div class="option-col" id="col-right"></div>
+        </div>
+    </div>
+
+    <!-- VIEW 3: SUMMARY -->
+    <div id="view-summary" class="view">
+        <div class="summary-content">
+            <h2>Session Complete!</h2>
+            <div class="big-score" id="summary-score">8/10</div>
+            <p>Accuracy on first try</p>
+            <button id="btn-home" style="background: var(--primary); color:white; border:none; padding:15px; border-radius:12px; font-size:18px; width:100%; margin-top:20px; box-shadow: 0 4px 0 #a350e0;">Back to Home</button>
+        </div>
+    </div>
+
+    <script>
+        /** 1. DATA SETUP **/
+        const rawCSV = `
+一味,jat1 mei6,just
+一生一世,jat1 saang1 jat1 sai3,lifetime
+下,haa6,bit
+乜,mat1,what
+亂,lyun6,randomly
+些少,se1 siu2,little
+你,nei5,you
+係,hai6,is
+俾,bei2,to/let/by
+個,go3,a (cl.)
+做,zou6,do
+八両,baat3 loeng2,eight-tael
+冇,mou5,no
+出,ceot1,exert
+到,dou3,until
+力,lik6,effort
+加薪,gaa1 san1,raise
+半斤,bun3 gan1,half-catty
+去,heoi3,go
+吠,fai6,bark
+吹漲,ceoi1 zoeng2,helpless
+呢,ni1,this
+咁,gam3,so
+咗,zo2,past
+咪,mai5,don't
+唔係,m4 hai6,not
+嗡,ung1,babble
+嚇,haak3,scare
+塊,faai3,piece
+壞,waai6,bad
+夠,gau3,enough
+夠薑,gau3 goeng1,brave
+奀,ngan1,scrawny
+奴隸,nou4 lai6,slave
+家陣,gaa1 zan6,now
+就,zau6,then
+弊,bai6,terrible
+惡,ok3,fierce
+想,soeng2,want
+我,ngo5,I/me
+所謂,so2 wai6,matter
+手,sau2,hand
+打工仔,daa2 gung1 zai2,worker
+扭,nau2,twist
+折墮,zit3 do6,suffering
+拿起,naa4 hei2,lift
+搵,wan2,earn
+搶,coeng2,rob
+攞,lo2,take
+最,zeoi3,most
+會,wui5,will
+月底,jyut6 dai2,month-end
+有,jau5,have
+樣,joeng6,way
+死,sei2,die
+波士,bo1 si6,boss
+洗,sai2,spend
+濕水,sap1 seoi2,wet
+濕滯,sap1 zai6,stuck
+炮仗,paau3 zoeng3,firecracker
+為,wai6,for
+班,baan1,group
+理想,lei5 soeng2,ideal
+番,faan1,back
+癲,din1,crazy
+發威,faat3 wai1,rage
+直頭,zik6 tau4,simply
+睇,tai2,look/read
+確係,kok3 hai6,indeed
+種,zung2,kind
+積,zik1,jammed
+糴,dik6,buy-grain
+腸胃,coeng4 wai6,stomach
+處,cyu3,place
+親,can1,whenever
+計,gai3,trick
+話,waa6,say
+認真,jan6 zan1,really
+講,gong2,speak/say
+走,zau2,run/leave
+足,zuk1,full
+辛苦,san1 fu2,hardship
+通街,tung1 gaai1,everywhere
+過,gwo3,than
+邊,bin1,where
+郁,yuk1,move
+錢幣,cin4 bai6,money
+鎗,coeng1,gun
+開胃,hoi1 wai6,amusing
+隻,zek3,item
+雞,gai1,chicken
+面,min6,face
+響,hoeng2,sound
+食,sik6,eat
+鬼,gwai2,ghost
+點,dim2,how
+每日,mui5 jat6,everyday
+打開,daa2 hoi1,open
+報紙,bou3 zi2,newspaper
+準備,zeon2 bei6,prepare
+被,bei6,by
+嚇親,haak3 can1,frightened
+所有,so2 jau5,all
+頭條,tau4 tiu4,headline
+鑊鑊,wok6 wok6,every time
+新鮮,san1 sin1,fresh
+甘,gam1,intense
+雖然,seoi1 jin4,although
+中文字,zung1 man4 zi6,Chinese characters
+唔多,m4 do1,not much
+識,sik1,know
+當,dong3,treat as
+冇到,mou5 dou3,nonexistent
+唔,m4,not
+仍然,jing4 jin4,still
+可以,ho2 ji5,can
+聽到,teng1 dou2,hear
+新聞,san1 man4,news
+報告,bou3 gou3,report
+間唔中,gaan3 m4 zung1,occasionally
+收吓風,sau1 haa5 fung1,hear rumors
+同,tung4,and
+閒聊,haan4 liu4,chat
+發覺,faat3 gok3,discover
+社會,se5 wui2,society
+好多,hou2 do1,a lot
+嘢,je5,things
+真係,zan1 hai6,really
+世事,sai3 si6,worldly affairs
+難料,naan4 liu6,unpredictable
+諗住,nam2 zyu6,plan to
+搏,bok3,gamble
+一鋪,jat1 pou1,one round
+根本,gan1 bun2,fundamentally
+冇得,mou5 dak1,cannot
+贏,jeng4,win
+一,jat1,once
+危機,ngai4 gei1,crisis
+一定,jat1 ding6,definitely
+要,jiu3,need to
+保護,bou2 wu6,protect
+住,zyu6,keep
+條,tiu4,measure word
+命,meng6,life
+可惜,ho2 sik1,pity
+嘅,ge3,possessive particle
+都,dou1,also
+日光日白,jat6 gwong1 jat6 baak6,broad daylight
+無啦啦,mou4 laa1 laa1,out of nowhere
+塌樓,taap3 lau4,building collapse
+親人,can1 jan4,relatives
+機會,gei1 wui6,opportunity
+再見,zoi3 gin3,goodbye
+唯有,wai4 jau5,only can
+講句,gong2 geoi3,say a phrase
+節哀順變,zit3 oi1 seon6 bin3,condolences
+唔明,m4 ming4,unclear
+警察,ging2 caat3,police
+無論,mou4 leon6,no matter
+幾多,gei2 do1,how many
+次,ci3,times
+冚竇,ham6 dau3,raid
+啲,di1,some/plural
+後生仔,hau6 saang1 zai2,young men
+後生女,hau6 saang1 neoi5,young women
+死都,sei2 dou1,even to death
+唔肯,m4 hang2,refuse
+廁所,ci3 so2,toilet
+三個,saam1 go3,three
+人,jan4,people
+入,jap6,enter
+同一,tung4 jat1,same
+格,gaak3,cubicle
+出奇,ceot1 kei4,surprising
+鼻,bei6,nose
+未,mei6,not yet
+抹,maat3,wipe
+乾淨,gon1 zeng6,clean
+一齊,jat1 cai4,together
+出嚟,ceot1 lei4,come out
+應該,jing1 goi1,should
+批評,pai1 ping4,criticize
+佢哋,keoi5 dei6,they
+但係,daan6 hai6,but
+有眼睇,jau5 ngaan5 tai2,obvious
+香港,hoeng1 gong2,Hong Kong
+太,taai3,too
+多,do1,many
+年青人,nin4 cing1 jan4,young people
+毒品,duk6 ban2,drugs
+受,sau6,suffer/receive
+控制,hung3 zai3,control
+父母,fu6 mou5,parents
+哩個,ni1 go3,this
+職位,zik1 wai2,position
+收工,sau1 gung1,finish work
+盡量,zeon6 loeng6,as much as possible
+囝囝囡囡,zai4 zai2 neoi4 neoi2,children
+好好,hou2 hou2,properly
+溝通,kau1 tung1,communicate
+地球,dei6 kau4,Earth
+轉,zyun3,spin
+唔知,m4 zi1,don't know
+點算,dim2 syun3,what to do
+究竟,gau3 ging2,actually
+幾時,gei2 si4,when
+完,jyun4,end
+立立亂,laap6 laap6 lyun6,chaotic
+天文台,tin1 man4 toi4,observatory
+警告,ging2 gou3,warn
+聽朝,ting1 ziu1,tomorrow morning
+掛,gwaa3,hoist
+十號風球,sap6 hou6 fung1 kau4,signal 10 typhoon
+淨係,zing6 hai6,only
+諗緊,nam2 gan2,thinking
+瞓,fan3,sleep
+幾個,gei2 go3,a few
+鐘頭,zung1 tau4,hours
+好,hou2,very
+恨,han6,long for
+放假,fong3 gaa3,holiday
+講都冇咁靈,gong2 dou1 mou5 gam3 ling4,speak of the devil
+寧願,ning4 jyun6,rather
+有得,jau5 dak1,able to
+開工,hoi1 gung1,start work
+好過,hou2 gwo3,better than
+佢,keoi5,he/she/it
+打得成,daa2 dak1 sing4,successfully hit
+電視,din6 si6,television
+又,jau6,again
+特別,dak6 bit6,special
+立法會,laap6 faat3 wui2,legislative council
+門口,mun4 hau2,entrance
+八十後,baat3 sap6 hau6,post-80s
+企晒,kei5 saai3,all standing
+响度,hoeng2 dou6,here
+有人,jau5 jan4,someone
+反,faan2,oppose
+高鐵,gou1 tit3,high-speed rail
+亦,jik6,also
+支持,zi1 ci4,support
+所以,so2 ji5,therefore
+決定,kyut3 ding6,decide
+起,hei2,build
+唔起,m4 hei2,not build
+一啲都,jat1 di1 dou1,not at all
+一講起,jat1 gong2 hei2,speaking of
+政治,zing3 zi6,politics
+實,sat6,definitely
+複雜,fuk1 zaap6,complex
+講假,gong2 gaa2,joking
+不如,bat1 jyu4,how about
+睇返,tai2 faan1,watch again
+娛樂版,jyu4 lok6 baan2,entertainment section
+嚟,lei4,come
+輕鬆吓,hing1 sung1 haa5,relax
+四大,sei3 daai6,big four
+喺,hai2,at
+頒獎禮,baan1 zoeng2 lai5,award ceremony
+出現,ceot1 jin6,appear
+書展,syu1 zin2,book fair
+o靚模,leng1 mou4,pseudo-model
+出面,ceot1 min6,outside
+咪話,mai5 waa6,don't say
+下次,haa6 ci3,next time
+諗一諗,nam2 jat1 nam2,think a bit
+加,gaa1,add
+三百五,saam1 baak3 ng5,350
+送,sung3,give away
+攬枕,laam5 zam2,body pillow
+睇吓,tai2 haa5,take a look
+八卦,baat3 gwaa3,gossip
+開心,hoi1 sam1,happy
+就係,zau6 hai6,exactly
+過身,gwo3 san1,pass away
+就好似,zau6 hou2 ci5,just like
+菲律賓,fei1 leot6 ban1,Philippines
+一路,jat1 lou6,continuously
+喊,haam3,cry
+冇親,mou5 can1,no relatives
+嚟緊,lei4 gan2,upcoming
+有幾,jau5 gei2,how much
+記住,gei3 zyu6,remember
+大家,daai6 gaa1,everyone
+搭緊,daap3 gan2,riding
+同一條,tung4 jat1 tiu4,same (measure word)
+船,syun4,boat
+當我冇到,dong3 ngo5 mou5 dou3,ignore me
+世事難料,sai3 si6 naan4 liu6,unpredictable affairs
+搏一鋪,bok3 jat1 pou1,gamble once
+唔係講假,m4 hai6 gong2 gaa2,no joke
+好恨,hou2 han6,really want
+冇咁靈,mou5 gam3 ling4,not so accurate
+`;
+
+        let dictionary = [];
+        let sessionQueue = [];
+        let sessionResults = { total: 0, firstTryCorrect: 0 };
+        let currentCard = null;
+        
+        // Quiz State
+        let isLocked = false; 
+        let currentMode = 0; // 0: Eng, 1: Char, 2: Jyutping
+        let selectedLeft = null;
+        let selectedRight = null;
+        let correctLeftVal = null;
+        let correctRightVal = null;
+
+        // SM-2 Constants
+        const DEFAULT_EFACTOR = 2.5;
+
+        /** 2. PERSISTENCE & PARSING **/
+        function initData() {
+            const saved = localStorage.getItem('flashcard_canto_stats');
+            const statsMap = saved ? JSON.parse(saved) : {};
+
+            dictionary = rawCSV.trim().split('\n').map(line => {
+                const [char, jyutping, en] = line.split(',').map(item => item.trim());
+                const stat = statsMap[char] || {
+                    interval: 0,
+                    repetition: 0,
+                    efactor: DEFAULT_EFACTOR,
+                    correctCount: 0,
+                    nextReviewDate: 0
+                };
+                return { char, jyutping, en, ...stat };
+            });
+            renderDashboard();
+        }
+
+        function saveData() {
+            const statsMap = {};
+            dictionary.forEach(card => {
+                statsMap[card.char] = {
+                    interval: card.interval,
+                    repetition: card.repetition,
+                    efactor: card.efactor,
+                    correctCount: card.correctCount,
+                    nextReviewDate: card.nextReviewDate
+                };
+            });
+            localStorage.setItem('flashcard_canto_stats', JSON.stringify(statsMap));
+        }
+
+        /** 3. SM-2 ALGORITHM **/
+        function updateSM2(card, quality) {
+            if (quality >= 3) {
+                if (card.repetition === 0) {
+                    card.interval = 1;
+                } else if (card.repetition === 1) {
+                    card.interval = 6;
+                } else {
+                    card.interval = Math.round(card.interval * card.efactor);
+                }
+                card.repetition++;
+                card.correctCount++;
+            } else {
+                card.repetition = 0;
+                card.interval = 1;
+            }
+
+            card.efactor = card.efactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+            if (card.efactor < 1.3) card.efactor = 1.3;
+
+            const now = Date.now();
+            card.nextReviewDate = now + (card.interval * 24 * 60 * 60 * 1000);
+        }
+
+        /** 4. TTS ENGINE (Cantonese) **/
+        function speakCantonese(text) {
+            if (!window.speechSynthesis) return;
+            
+            window.speechSynthesis.cancel();
+            
+            const msg = new SpeechSynthesisUtterance();
+            msg.text = text;
+            msg.lang = 'zh-HK';
+            msg.rate = 0.9;
+            msg.volume = 1.0;
+
+            const voices = window.speechSynthesis.getVoices();
+            
+            let hkVoice = voices.find(v => v.lang === 'zh-HK') ||
+                          voices.find(v => v.lang.includes('zh') && v.lang.includes('HK')) ||
+                          voices.find(v => v.lang.includes('zh')); // fallback to any chinese if HK not found
+
+            if (hkVoice) {
+                msg.voice = hkVoice;
+                msg.lang = hkVoice.lang;
+            }
+
+            window.speechSynthesis.speak(msg);
+        }
+
+        /** 5. UI CONTROLLERS **/
+        function switchView(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+        }
+
+        function renderDashboard() {
+            const tbody = document.getElementById('stats-body');
+            tbody.innerHTML = '';
+            
+            let counts = { 1: 0, 2: 0, 3: 0, 4: 0, "5+": 0 };
+
+            dictionary.forEach(card => {
+                if (card.correctCount >= 1) counts[1]++;
+                if (card.correctCount >= 2) counts[2]++;
+                if (card.correctCount >= 3) counts[3]++;
+                if (card.correctCount >= 4) counts[4]++;
+                if (card.correctCount >= 5) counts["5+"]++;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="font-size: 1.2em">${card.char}</td>
+                    <td>${card.jyutping}</td>
+                    <td>${card.en}</td>
+                    <td style="text-align:center"><span class="score-pill">${card.correctCount}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('stat-1').innerText = counts[1];
+            document.getElementById('stat-2').innerText = counts[2];
+            document.getElementById('stat-3').innerText = counts[3];
+            document.getElementById('stat-4').innerText = counts[4];
+            document.getElementById('stat-5plus').innerText = counts["5+"];
+            document.getElementById('stat-total').innerText = ' / ' + dictionary.length;
+        }
+
+        function startSession() {
+            const now = Date.now();
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            
+            let newPile = dictionary.filter(c => c.nextReviewDate === 0).sort(() => Math.random() - 0.5);
+            let dueReviews = dictionary.filter(c => c.nextReviewDate > 0 && c.nextReviewDate <= now).sort((a, b) => a.nextReviewDate - b.nextReviewDate);
+            let futureReviews = dictionary.filter(c => {
+                if (c.nextReviewDate <= now) return false;
+                const lastPlayed = c.nextReviewDate - (c.interval * DAY_MS);
+                return (now - lastPlayed) >= DAY_MS; 
+            }).sort((a, b) => a.nextReviewDate - b.nextReviewDate); 
+
+            let selectedNew = newPile.splice(0, 6);
+            let selectedReview = dueReviews.splice(0, 4);
+            
+            if (selectedReview.length < 4) {
+                const needed = 4 - selectedReview.length;
+                selectedReview = selectedReview.concat(futureReviews.splice(0, needed));
+            }
+
+            let totalSelected = selectedNew.length + selectedReview.length;
+            
+            if (totalSelected < 10 && newPile.length > 0) {
+                selectedNew = selectedNew.concat(newPile.splice(0, 10 - totalSelected));
+            }
+            
+            totalSelected = selectedNew.length + selectedReview.length;
+            if (totalSelected < 10) {
+                const extraDue = dueReviews.splice(0, 10 - totalSelected);
+                selectedReview = selectedReview.concat(extraDue);
+                if (10 - totalSelected - extraDue.length > 0) {
+                    selectedReview = selectedReview.concat(futureReviews.splice(0, 10 - totalSelected - extraDue.length));
+                }
+            }
+
+            let selected = [...selectedNew, ...selectedReview];
+
+            if (selected.length === 0) {
+                alert("You've reviewed everything available! Come back in 24 hours to let your memory consolidate.");
+                return;
+            }
+
+            sessionQueue = selected.sort(() => Math.random() - 0.5).map(card => ({ ...card, firstTry: true }));
+            sessionResults.total = sessionQueue.length;
+            sessionResults.firstTryCorrect = 0;
+            
+            switchView('view-quiz');
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            if (sessionQueue.length === 0) {
+                showSummary();
+                return;
+            }
+
+            isLocked = false;
+            selectedLeft = null;
+            selectedRight = null;
+            currentCard = sessionQueue[0];
+            
+            const qCard = document.getElementById('question-card');
+            const qText = document.getElementById('question-text');
+            const colLeft = document.getElementById('col-left');
+            const colRight = document.getElementById('col-right');
+            const colsContainer = document.getElementById('quiz-columns');
+
+            // Reset UI
+            qCard.className = 'fade-in';
+            qCard.onclick = null;
+            colLeft.innerHTML = '';
+            colRight.innerHTML = '';
+
+            // Randomly select question mode (0: English, 1: Character, 2: Jyutping)
+            currentMode = Math.floor(Math.random() * 3);
+            
+            let questionValue, leftKey, rightKey;
+
+            if (currentMode === 0) {
+                // English Question
+                colsContainer.style.gridTemplateColumns = "1fr 1fr";
+                questionValue = currentCard.en;
+                leftKey = 'char';
+                rightKey = 'jyutping';
+            } else if (currentMode === 1) {
+                // Character Question
+                colsContainer.style.gridTemplateColumns = "2fr 1fr";
+                questionValue = currentCard.char;
+                leftKey = 'en';
+                rightKey = 'jyutping';
+            } else {
+                // Jyutping Question
+                colsContainer.style.gridTemplateColumns = "3fr 1fr";
+                questionValue = currentCard.jyutping;
+                leftKey = 'en';
+                rightKey = 'char';
+            }
+
+            qText.innerText = questionValue;
+            correctLeftVal = currentCard[leftKey];
+            correctRightVal = currentCard[rightKey];
+
+            // Get 4 random distractors
+            let distractors = dictionary.filter(c => c.char !== currentCard.char).sort(() => 0.5 - Math.random()).slice(0, 4);
+            
+            // Build and shuffle column options
+            let leftOptions = [correctLeftVal, ...distractors.map(d => d[leftKey])].sort(() => 0.5 - Math.random());
+            let rightOptions = [correctRightVal, ...distractors.map(d => d[rightKey])].sort(() => 0.5 - Math.random());
+
+            // Render columns
+            leftOptions.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = opt;
+                btn.onclick = () => selectOption('left', opt, btn);
+                colLeft.appendChild(btn);
+            });
+
+            rightOptions.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = opt;
+                btn.onclick = () => selectOption('right', opt, btn);
+                colRight.appendChild(btn);
+            });
+
+            updateProgressBar();
+        }
+
+        function selectOption(colName, value, btnElem) {
+            if (isLocked) return;
+            
+            const colContainer = document.getElementById(colName === 'left' ? 'col-left' : 'col-right');
+            colContainer.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+            
+            btnElem.classList.add('selected');
+
+            if (colName === 'left') selectedLeft = value;
+            else selectedRight = value;
+
+            // Immediately check answer when both are selected
+            if (selectedLeft && selectedRight) {
+                checkAnswer();
+            }
+        }
+
+        function checkAnswer() {
+            if (isLocked || !selectedLeft || !selectedRight) return;
+            isLocked = true;
+            
+            const qCard = document.getElementById('question-card');
+            
+            let isCorrectLeft = selectedLeft === correctLeftVal;
+            let isCorrectRight = selectedRight === correctRightVal;
+            let isTotallyCorrect = isCorrectLeft && isCorrectRight;
+
+            // Speak the character answer
+            speakCantonese(currentCard.char);
+
+            // Highlight chosen and correct answers
+            const leftBtns = document.getElementById('col-left').querySelectorAll('.option-btn');
+            const rightBtns = document.getElementById('col-right').querySelectorAll('.option-btn');
+
+            leftBtns.forEach(b => {
+                if (b.innerText === correctLeftVal) b.classList.add('correct-alt');
+                else if (b.innerText === selectedLeft && !isCorrectLeft) b.classList.add('wrong-alt');
+                b.classList.remove('selected');
+            });
+
+            rightBtns.forEach(b => {
+                if (b.innerText === correctRightVal) b.classList.add('correct-alt');
+                else if (b.innerText === selectedRight && !isCorrectRight) b.classList.add('wrong-alt');
+                b.classList.remove('selected');
+            });
+
+            const originalInDict = dictionary.find(d => d.char === currentCard.char);
+
+            if (isTotallyCorrect) {
+                qCard.classList.add('correct');
+                if (currentCard.firstTry) sessionResults.firstTryCorrect++;
+                updateSM2(originalInDict, 5);
+                sessionQueue.shift();
+            } else {
+                qCard.classList.add('wrong');
+                updateSM2(originalInDict, 0);
+                currentCard.firstTry = false;
+                sessionQueue.shift();
+                sessionQueue.push(currentCard);
+            }
+
+            // Click question card to continue
+            qCard.classList.add('clickable');
+            qCard.onclick = () => {
+                qCard.onclick = null;
+                qCard.classList.remove('clickable', 'correct', 'wrong');
+                nextQuestion();
+            };
+        }
+
+        function updateProgressBar() {
+            const totalInSession = sessionResults.total;
+            const finished = totalInSession - sessionQueue.filter(c => c.firstTry).length;
+            const percent = (finished / totalInSession) * 100;
+            document.getElementById('progress-inner').style.width = `${percent}%`;
+        }
+
+        function showSummary() {
+            saveData();
+            renderDashboard();
+            document.getElementById('summary-score').innerText = `${sessionResults.firstTryCorrect} / ${sessionResults.total}`;
+            switchView('view-summary');
+        }
+
+        /** 6. INIT **/
+        function loadVoices() {
+            window.speechSynthesis.getVoices();
+        }
+
+        window.onload = () => {
+            initData();
+            loadVoices();
+            if (speechSynthesis.onvoiceschanged !== undefined) {
+                speechSynthesis.onvoiceschanged = loadVoices;
+            }
+        };
+
+        document.getElementById('btn-go').onclick = startSession;
+        document.getElementById('btn-home').onclick = () => switchView('view-home');
+
+    </script>
+<!-- Service Worker Registration -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('ServiceWorker registration successful');
+      })
+      .catch(err => {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+  });
+}
+</script>
+</body>
+</html>
